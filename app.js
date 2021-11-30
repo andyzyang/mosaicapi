@@ -16,6 +16,18 @@ const readFile = (filePath) => {
 async function storeData() {
   let data = await readFile(datasetFile);
   let datasets = JSON.parse(data);
+  datasets.map((project) => {
+    project["Project Phase Actual Start Date"] = new Date(
+      project["Project Phase Actual Start Date"]
+    );
+    project["Project Phase Planned End Date"] = new Date(
+      project["Project Phase Planned End Date"]
+    );
+    project["Project Phase Actual End Date"] = new Date(
+      project["Project Phase Actual End Date"]
+    );
+    return project;
+  });
   database.insert(datasets);
 }
 
@@ -39,23 +51,24 @@ app.get("/api/projects/", (req, res, next) => {
     page = 0;
     limit = 0;
   }
+
   let queryObject = {
     "Project School Name": req.query.psn || "",
     "Project Description": req.query.pd || "",
-    "Project Phase Actual Start Date": req.query.ppasd || "",
-    "Project Phase Planned End Date": req.query.ppped || "",
-    "Project Phase Actual End Date": req.query.ppaed || "",
-    "Project Budget Amount": req.query.pba || "",
-    "Final Estimate of Actual Costs Through End of Phase Amount":
-      req.query.feactepa || "",
-    "Total Phase Actual Spending Amount": req.query.tpasa || "",
+    "Project Phase Actual Start Date": req.query.ppasd
+      ? { $gt: new Date(req.query.ppasd) }
+      : "",
+    "Project Phase Planned End Date": req.query.ppped
+      ? { $gt: new Date(req.query.ppped) }
+      : "",
+    "Project Phase Actual End Date": req.query.ppaed
+      ? { $gt: new Date(req.query.ppaed) }
+      : "",
   };
 
   Object.entries(queryObject).forEach(([k, v]) => {
     if (!v) delete queryObject[k];
   });
-
-  console.log(queryObject);
 
   database
     .find(queryObject)
@@ -70,7 +83,6 @@ app.get("/api/projects/", (req, res, next) => {
 app.put("/api/projects/", function (req, res, next) {
   if (!("_id" in req.body)) return res.status(400).end("_id is missing");
   const id = req.body._id;
-  console.log(req.body);
   let updateObject = req.body;
   Object.entries(updateObject).forEach(([k, v]) => {
     if (
@@ -79,7 +91,6 @@ app.put("/api/projects/", function (req, res, next) {
     )
       delete updateObject[k];
   });
-  console.log(updateObject);
   if (updateObject != {}) {
     database.findOne({ _id: id }, function (err, item) {
       if (err) return res.status(500).end(err);
@@ -97,6 +108,29 @@ app.put("/api/projects/", function (req, res, next) {
       );
     });
   }
+});
+
+app.patch("/api/projects/", function (req, res, next) {
+  if (!("ids" in req.body)) return res.status(400).end("ids are missing");
+  const ids = req.body.ids;
+  let updateObject = req.body;
+  Object.entries(updateObject).forEach(([k, v]) => {
+    if (k == "ids") {
+      delete updateObject[k];
+    }
+  });
+  if (updateObject != {}) {
+    for (let id of ids) {
+      database.findOne({ _id: id }, function (err, item) {
+        if (err) return res.status(500).end(err);
+        if (!item) {
+          return res.status(404).end("Project id #" + id + " does not exist");
+        }
+        database.update({ _id: id }, { $set: updateObject }, function () {});
+      });
+    }
+  }
+  res.end();
 });
 
 const http = require("http");
